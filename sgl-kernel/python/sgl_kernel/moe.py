@@ -60,3 +60,49 @@ def moe_fused_gate(
         n_share_experts_fusion,
         routed_scaling_factor,
     )
+
+
+def fp16_grouped_mm(
+    output,
+    a,
+    b,
+    stride_a,
+    stride_b,
+    stride_c,
+    problem_sizes,
+    expert_offsets,
+):
+    torch.ops.sgl_kernel.fp16_grouped_mm.default(
+        output,
+        a,
+        b,
+        stride_a,
+        stride_b,
+        stride_c,
+        problem_sizes,
+        expert_offsets,
+    )
+
+
+def prepare_moe_cutlass_fp16_input(
+    topk_ids,
+    expert_offsets,
+    problem_sizes1,
+    problem_sizes2,
+    input_permutation,
+    output_permutation,
+    num_experts,
+    n,
+    k,
+):
+    torch.ops.sgl_kernel.prepare_moe_cutlass_fp16_input.default(
+        topk_ids,
+        expert_offsets,
+        problem_sizes1,
+        problem_sizes2,
+        input_permutation,
+        output_permutation,
+        num_experts,
+        n,
+        k,
+    )

@@ -209,6 +209,26 @@ std::vector<at::Tensor> moe_fused_gate(
     int64_t n_share_experts_fusion,
     double routed_scaling_factor);
 
+void fp16_grouped_mm(
+    torch::Tensor& output,
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& stride_a,
+    const torch::Tensor& stride_b,
+    const torch::Tensor& stride_c,
+    const torch::Tensor& problem_sizes,
+    const torch::Tensor& expert_offsets);
+
+void prepare_moe_cutlass_fp16_input(
+    const torch::Tensor& topk_ids,
+    torch::Tensor& expert_offsets,
+    torch::Tensor& problem_sizes1,
+    torch::Tensor& problem_sizes2,
+    torch::Tensor& input_permutation,
+    torch::Tensor& output_permutation,
+    int64_t num_experts,
+    int64_t n,
+    int64_t k);
 /*
  * From csrc/speculative
  */

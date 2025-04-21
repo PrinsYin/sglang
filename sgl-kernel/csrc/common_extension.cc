@@ -151,6 +151,17 @@ TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
       "(Tensor[])");
   m.impl("moe_fused_gate", torch::kCUDA, &moe_fused_gate);
 
+  m.def(
+      "fp16_grouped_mm(Tensor! output, Tensor a, Tensor b, Tensor stride_a, Tensor stride_b, Tensor stride_c, Tensor "
+      "problem_sizes, Tensor expert_offsets) -> ()");
+  m.impl("fp16_grouped_mm", torch::kCUDA, &fp16_grouped_mm);
+
+  m.def(
+      "prepare_moe_cutlass_fp16_input(Tensor topk_ids, Tensor! expert_offsets, Tensor! problem_sizes1, Tensor! "
+      "problem_sizes2, "
+      "Tensor! input_permutation, Tensor! output_permutation, int num_experts, int n, int k) -> ()");
+  m.impl("prepare_moe_cutlass_fp16_input", torch::kCUDA, &prepare_moe_cutlass_fp16_input);
+
   /*
    * From csrc/speculative
    */
