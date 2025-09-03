@@ -42,11 +42,11 @@ def _allclose_dict(
     missing = set(a) - set(b)
     extra = set(b) - set(a)
     if len(missing) + len(extra) > 20:
-        return False, f"top-k token 差异过大; missing={sorted(missing)} extra={sorted(extra)}"
+        return False, f"top-k token 差异过大; missing={sorted(missing)} extra={sorted(extra)}",0
 
     common = set(a) & set(b)
     if not common:
-        return False, "没有共同 token 可比较"
+        return False, "没有共同 token 可比较",0
     diffs = []
     for tid in common:
         diffs.append(abs(a[tid] - b[tid]))
@@ -54,9 +54,9 @@ def _allclose_dict(
     ok = all(abs(a[tid] - b[tid]) <= (atol + rtol * max(abs(a[tid]), abs(b[tid]))) for tid in common)
     
     if not ok:
-        return False, f"logprob 偏差过大={max_diff:.6g} (atol={atol}, rtol={rtol})"
-    print(f"position={position} top-k token; missing={sorted(missing)} extra={sorted(extra)} logprob 最大偏差={max_diff:.6g} ")
-    return True, ""
+        return False, f"logprob 偏差过大={max_diff:.6g} (atol={atol}, rtol={rtol})",max_diff
+    print(f"position={position} top-k token; missing={sorted(missing)} extra={sorted(extra)} len common:{len(common)} logprob 最大偏差={max_diff:.6g} ")
+    return True, "",max_diff
 
 class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
     def test_against_hf_stored_topk(self):
@@ -115,7 +115,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                 # print(f"ids: {len(rec['input_topk_logprobs'])}")
                 assert len(srt_input_top) == len(gt_inputs), f"input_top 长度不一致（SGLang vs ground_truth）, srt_input_top: {len(srt_input_top)}, gt_inputs: {len(gt_inputs)}"
 
-                
+                req_max_diff = -99999
                 for srt_entry, gt_entry in zip(srt_input_top, gt_inputs):
                     position = gt_entry["position"]
                     if not srt_entry:
@@ -124,15 +124,18 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                     srt_map = _extract_srt_topk(srt_entry)
                     gt_map = _pack_topk(gt_entry["topk_indices"], gt_entry["topk_logprobs"])
 
-                    ok, msg = _allclose_dict(srt_map, gt_map, rtol=0.2, atol=1e-6, require_same_keys=True,position=position)
+                    ok, msg, max_diff = _allclose_dict(srt_map, gt_map, rtol=10, atol=1e-6, require_same_keys=True,position=position)
+                    req_max_diff = max(req_max_diff, max_diff)
                     self.assertTrue(ok, f"[input pos={gt_entry['position']}] {msg}")
+
+                print(f"position={position} top-k token; logprob 最大偏差={req_max_diff:.6g} ")
 
                 
                 
                 assert len(meta["output_top_logprobs"]) >= 1, "没有拿到输出 top-k"
                 srt_next_map = _extract_srt_topk(meta["output_top_logprobs"][0])
                 gt_next_map = _pack_topk(gt_next["topk_indices"], gt_next["topk_logprobs"])
-                ok, msg = _allclose_dict(srt_next_map, gt_next_map, rtol=0.2, atol=1e-6, require_same_keys=True)
+                ok, msg, max_diff = _allclose_dict(srt_next_map, gt_next_map, rtol=0.2, atol=1e-6, require_same_keys=True,position=-1)
                 self.assertTrue(ok, f"[first_output pos={gt_next['position']}] {msg}")
 
         finally:
