@@ -64,7 +64,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
         assert len(records) > 0, "ground_truth 为空；确认 HF 仓库与文件名是否正确"
 
         # rng = random.Random(1234)
-        subset = random.sample(records, k=min(10, len(records)))
+        subset = random.sample(records, k=min(len(records)/2, len(records)))
         print(f"testing on {len(subset)} samples")
 
         os.environ["SGLANG_LOGITS_PROCESSER_CHUNK_SIZE"] = "1"  
@@ -124,7 +124,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                     srt_map = _extract_srt_topk(srt_entry)
                     gt_map = _pack_topk(gt_entry["topk_indices"], gt_entry["topk_logprobs"])
 
-                    ok, msg = _allclose_dict(srt_map, gt_map, rtol=10, atol=1e-6, require_same_keys=True,position=position)
+                    ok, msg = _allclose_dict(srt_map, gt_map, rtol=0.2, atol=1e-6, require_same_keys=True,position=position)
                     self.assertTrue(ok, f"[input pos={gt_entry['position']}] {msg}")
 
                 
@@ -132,7 +132,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                 assert len(meta["output_top_logprobs"]) >= 1, "没有拿到输出 top-k"
                 srt_next_map = _extract_srt_topk(meta["output_top_logprobs"][0])
                 gt_next_map = _pack_topk(gt_next["topk_indices"], gt_next["topk_logprobs"])
-                ok, msg = _allclose_dict(srt_next_map, gt_next_map, rtol=1, atol=1e-6, require_same_keys=True)
+                ok, msg = _allclose_dict(srt_next_map, gt_next_map, rtol=0.2, atol=1e-6, require_same_keys=True)
                 self.assertTrue(ok, f"[first_output pos={gt_next['position']}] {msg}")
 
         finally:
