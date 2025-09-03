@@ -64,7 +64,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
         assert len(records) > 0, "ground_truth 为空；确认 HF 仓库与文件名是否正确"
 
         # rng = random.Random(1234)
-        subset = random.sample(records, k=min(len(records)/2, len(records)))
+        subset = random.sample(records, k=min(len(records)//2, len(records)))
         print(f"testing on {len(subset)} samples")
 
         os.environ["SGLANG_LOGITS_PROCESSER_CHUNK_SIZE"] = "1"  
