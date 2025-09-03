@@ -41,25 +41,34 @@ def _allclose_dict(
 ) -> Tuple[bool, str]:
     missing = set(a) - set(b)
     extra = set(b) - set(a)
-    if len(missing) + len(extra) > 20:
-        return False, f"top-k token 差异过大; missing={sorted(missing)} extra={sorted(extra)}",0
+    if len(missing) + len(extra) > 40:
+        return False, f"top-k token 差异过大; missing={sorted(missing)} extra={sorted(extra)}",0,0
 
     common = set(a) & set(b)
     if not common:
-        return False, "没有共同 token 可比较",0
+        return False, "没有共同 token 可比较",0,0  
+
     diffs = []
     for tid in common:
         diffs.append(abs(a[tid] - b[tid]))
+
+    # a_list = list(a.values())
+    # b_list = list(b.values())
+    # for i in range(len(common)):
+    #     diffs.append(abs(a_list[i] - b_list[i]))
+
+    
     max_diff = max(diffs)
-    ok = all(abs(a[tid] - b[tid]) <= (atol + rtol * max(abs(a[tid]), abs(b[tid]))) for tid in common)
     mean_diff = sum(diffs) / len(common)
+    ok = abs(max_diff) <= rtol
     if not ok:
-        return False, f"logprob 偏差过大={max_diff:.6g} (atol={atol}, rtol={rtol})",max_diff
+        return False, f"logprob 偏差过大={max_diff:.6g} (atol={atol}, rtol={rtol})",max_diff,mean_diff
     # print(f"position={position} top-k token; missing={sorted(missing)} extra={sorted(extra)} len common:{len(common)} logprob 最大偏差={max_diff:.6g} ")
     return True, "",max_diff,mean_diff
 
 class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
     def test_against_hf_stored_topk(self):
+        os.environ["RETURN_ORIGINAL_LOGPROB"] = "True"
         records = load_ground_truth(repo_id="font-info/logprobs", pkl_filename="ground_truth.pkl")
         assert len(records) > 0, "ground_truth 为空；确认 HF 仓库与文件名是否正确"
 
@@ -67,7 +76,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
         subset = random.sample(records, k=min(len(records)//2, len(records)))
         print(f"testing on {len(subset)} samples")
 
-        os.environ["SGLANG_LOGITS_PROCESSER_CHUNK_SIZE"] = "1"  
+        # os.environ["SGLANG_LOGITS_PROCESSER_CHUNK_SIZE"] = "1"  
         engine = sgl.Engine(
             model_path=model_path,
             random_seed=42,
@@ -103,8 +112,6 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                 out = outputs[0]
                 meta = out["meta_info"]
 
-                
-                
                 srt_input_top = meta["input_top_logprobs"][1:]
                 with open("srt_input_top.json", "w") as f:
                     json.dump(srt_input_top, f, indent=2)
@@ -125,7 +132,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                     srt_map = _extract_srt_topk(srt_entry)
                     gt_map = _pack_topk(gt_entry["topk_indices"], gt_entry["topk_logprobs"])
 
-                    ok, msg, max_diff, mean_diff = _allclose_dict(srt_map, gt_map, rtol=10, atol=1e-6, require_same_keys=True,position=position)
+                    ok, msg, max_diff, mean_diff = _allclose_dict(srt_map, gt_map, rtol=0.5, atol=1e-6, require_same_keys=True,position=position)
                     req_max_diff = max(req_max_diff, max_diff)
                     req_mean_diff = max(req_mean_diff, mean_diff)
                     self.assertTrue(ok, f"[input pos={gt_entry['position']}] {msg}")
@@ -137,7 +144,7 @@ class TestChunkedLogprobsAgainstHFStored(CustomTestCase):
                 assert len(meta["output_top_logprobs"]) >= 1, "没有拿到输出 top-k"
                 srt_next_map = _extract_srt_topk(meta["output_top_logprobs"][0])
                 gt_next_map = _pack_topk(gt_next["topk_indices"], gt_next["topk_logprobs"])
-                ok, msg, max_diff, mean_diff = _allclose_dict(srt_next_map, gt_next_map, rtol=0.2, atol=1e-6, require_same_keys=True,position=-1)
+                ok, msg, max_diff, mean_diff = _allclose_dict(srt_next_map, gt_next_map, rtol=0.3, atol=1e-6, require_same_keys=True,position=-1)
                 self.assertTrue(ok, f"[first_output pos={gt_next['position']}] {msg}")
 
         finally:

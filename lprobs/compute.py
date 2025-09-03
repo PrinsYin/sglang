@@ -16,7 +16,7 @@ SHAREGPT_URL = (
 MODEL_NAME = DEFAULT_SMALL_MODEL_NAME_FOR_TEST
 NUM_SAMPLES = 500
 NUM_META_SAMPLES = 2
-TOP_K = 100
+TOP_K = 50
 OUTPUT_PKL = "ground_truth.pkl"
 OUTPUT_META = "ground_truth_meta.json"
 
@@ -40,7 +40,7 @@ texts = [
 print(f"Loading model {MODEL_NAME}...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME, torch_dtype=torch.float16, device_map="auto"
+    MODEL_NAME, torch_dtype=torch.float32, device_map="auto"
 )
 model.eval()
 
