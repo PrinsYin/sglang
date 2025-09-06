@@ -11,12 +11,17 @@ import time
 MODEL_NAME = DEFAULT_SMALL_MODEL_NAME_FOR_TEST
 INPUT_PKL_URL = "https://huggingface.co/datasets/font-info/logprobs/resolve/main/sglang_baseline.pkl"
 TOP_K = 20
-BATCH_SIZE = 50
-NUM_SAMPLES = 500
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 TOLERANCE_MAX_DIFF = 1.5
 TOLERANCE_MEAN_DIFF = 0.1
+
+# Test configurations
+TEST_CONFIGS = [
+    {"batch_size": 50, "num_samples": 200, "temperature": 0.5},
+    {"batch_size": 100, "num_samples": 300, "temperature": 1.0},
+    {"batch_size": 20, "num_samples": 500, "temperature": 2.0},
+]
 
 os.environ["RETURN_ORIGINAL_LOGPROB"] = "True"
 
@@ -83,71 +88,72 @@ class TestLogprobs(unittest.TestCase):
         return max(diffs), float(np.mean(diffs))
 
     def test_logprobs_comparison(self):
-        """Test the logprobs comparison functionality."""
+        """Test the logprobs comparison functionality with different parameter combinations."""
         # Load test data with retry mechanism
         records = self.load_test_data()
-        records = random.sample(records, k=min(NUM_SAMPLES, len(records)))
-        random.shuffle(records)
-        print(f"Testing with {len(records)} samples")
-
-        all_max, all_mean = [], []
         
-        for i in range(0, len(records), BATCH_SIZE):
-            batch = records[i:i+BATCH_SIZE]
-            input_ids = [rec["ids"] for rec in batch]
-            logprob_start_lens = [rec["start_pos"] for rec in batch]
+        for config_idx, config in enumerate(TEST_CONFIGS):
+            with self.subTest(config=config):
+                print(f"\n=== Testing Config {config_idx + 1}: {config} ===")
+                
+                # Sample records for this config
+                test_records = random.sample(records, k=min(config["num_samples"], len(records)))
+                random.shuffle(test_records)
+                print(f"Testing with {len(test_records)} samples, batch_size={config['batch_size']}, temperature={config['temperature']}")
 
-            # Sampling param per request
-            sampling_params = [ 
-                {
-                    "temperature": 1.0,
-                    "top_p": 1.0,
-                    "top_k": TOP_K,
-                    "max_new_tokens": 1
-                } for _ in batch
-            ]
+                all_max, all_mean = [], []
+                
+                for i in range(0, len(test_records), config["batch_size"]):
+                    batch = test_records[i:i+config["batch_size"]]
+                    input_ids = [rec["ids"] for rec in batch]
+                    logprob_start_lens = [rec["start_pos"] for rec in batch]
 
-            outputs = self.engine.generate(
-                input_ids=input_ids,
-                sampling_params=sampling_params,
-                return_logprob=True,
-                logprob_start_len=logprob_start_lens,
-                top_logprobs_num=TOP_K,
-            )
+                    # Sampling param per request
+                    sampling_params = [ 
+                        {
+                            "temperature": config["temperature"],
+                            "top_p": 1.0,
+                            "top_k": TOP_K,
+                            "max_new_tokens": 1
+                        } for _ in batch
+                    ]
 
-            for rec, output in zip(batch, outputs):
-                metaA = rec["meta"]
-                metaB = output["meta_info"]
+                    outputs = self.engine.generate(
+                        input_ids=input_ids,
+                        sampling_params=sampling_params,
+                        return_logprob=True,
+                        logprob_start_len=logprob_start_lens,
+                        top_logprobs_num=TOP_K,
+                    )
 
-                max_diff, mean_diff = self.compare_meta(metaA, metaB)
-                all_max.append(max_diff)
-                all_mean.append(mean_diff)
+                    for rec, output in zip(batch, outputs):
+                        metaA = rec["meta"]
+                        metaB = output["meta_info"]
 
-                # print(f"[Sample {rec['id']}] max Δ={max_diff:.6g}, mean Δ={mean_diff:.6g}")
+                        max_diff, mean_diff = self.compare_meta(metaA, metaB)
+                        all_max.append(max_diff)
+                        all_mean.append(mean_diff)
 
-        print("\n=== Overall statistics ===")
-        max_of_max = max(all_max)
-        mean_of_mean = np.mean(all_mean)
-        print(f"max of max Δ={max_of_max:.6g}")
-        print(f"mean of mean Δ={mean_of_mean:.6g}")
+                print(f"Config {config_idx + 1} - max of max Δ={max(all_max):.6g}")
+                print(f"Config {config_idx + 1} - mean of mean Δ={np.mean(all_mean):.6g}")
 
-        # Basic validation
-        self.assertIsInstance(all_max, list)
-        self.assertIsInstance(all_mean, list)
-        self.assertGreater(len(all_max), 0, "No test samples processed")
-        
-        # Tolerance checks with clear error messages
-        failed_samples = []
-        for i, (max_diff, mean_diff) in enumerate(zip(all_max, all_mean)):
-            if max_diff > TOLERANCE_MAX_DIFF:
-                failed_samples.append(f"Sample {i}: max_diff={max_diff:.6g} > {TOLERANCE_MAX_DIFF}")
-            if mean_diff > TOLERANCE_MEAN_DIFF:
-                failed_samples.append(f"Sample {i}: mean_diff={mean_diff:.6g} > {TOLERANCE_MEAN_DIFF}")
-        
-        if failed_samples:
-            self.fail(f"Tolerance exceeded in {len(failed_samples)} samples:\n" + "\n".join(failed_samples[:10]))
-        
-        print(f"✅ All {len(all_max)} samples passed tolerance checks (max_diff ≤ {TOLERANCE_MAX_DIFF}, mean_diff ≤ {TOLERANCE_MEAN_DIFF})")
+                # Basic validation
+                self.assertIsInstance(all_max, list)
+                self.assertIsInstance(all_mean, list)
+                self.assertGreater(len(all_max), 0, f"No test samples processed for config {config}")
+                
+                # Tolerance checks with clear error messages
+                failed_samples = []
+                for i, (max_diff, mean_diff) in enumerate(zip(all_max, all_mean)):
+                    if max_diff > TOLERANCE_MAX_DIFF:
+                        failed_samples.append(f"Sample {i}: max_diff={max_diff:.6g} > {TOLERANCE_MAX_DIFF}")
+                    if mean_diff > TOLERANCE_MEAN_DIFF:
+                        failed_samples.append(f"Sample {i}: mean_diff={mean_diff:.6g} > {TOLERANCE_MEAN_DIFF}")
+                
+                if failed_samples:
+                    self.fail(f"Config {config} - Tolerance exceeded in {len(failed_samples)} samples:\n" + "\n".join(failed_samples[:5]))
+                
+                print(f"✅ Config {config_idx + 1} - All {len(all_max)} samples passed tolerance checks")
 
 
 if __name__ == "__main__":
